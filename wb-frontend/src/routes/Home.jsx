@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DarkModeToggle } from '../components/uiElements';
-import github from '../assets/github.svg';
 
 const API = (import.meta.env.MODE === 'development')  ? 'http://localhost:1234' : 'https://artfreak-production.up.railway.app';
 
@@ -105,12 +104,8 @@ export default function Home() {
 
       </main>
       <footer className="absolute bottom-0 left-1/2 transform -translate-x-1/2 flex gap-2 items-center p-2">
-       
-      <a href='https://github.com/yourusername/artfreak' target="_blank" rel="noopener noreferrer" className="hover:scale-105">
-            <img src={github}  alt="GitHub" className="dark:invert w-6 h-6" />
-        </a>
-        
-        </footer>
+        {/* Footer content removed */}
+      </footer>
     </div>
   );
 }
