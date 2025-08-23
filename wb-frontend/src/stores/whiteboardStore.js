@@ -12,7 +12,7 @@ let yStrokes = null;
 let yActiveStrokes = null;
 let awareness = null;
 
-const API = (import.meta.env.MODE === 'development') ? 'ws://localhost:1234' : 'wss://ws.ronkiehn.dev';
+const API = (import.meta.env.MODE === 'development') ? 'ws://localhost:1234' : 'wss://artfreak-production.up.railway.app';
 
 const useWhiteboardStore = create((set, get) => ({
   // User state
