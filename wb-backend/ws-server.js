@@ -82,6 +82,7 @@ const corsOptions = {
     
     const allowedOrigins = environment === 'production' 
       ? [
+          'https://art-freakk.vercel.app/',
           'https://art-freakk.vercel.app', 
           'https://www.art-freakk.vercel.app',
           /^https:\/\/.*\.vercel\.app$/, // Allow all Vercel deployments
