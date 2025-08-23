@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import useWhiteboardStore from '../stores/whiteboardStore';
 import { DarkModeToggle, Tooltip } from './uiElements';
-import Gemini from './Gemini';
 
 
 const defaultValues = {
@@ -220,7 +219,6 @@ const TopMenu = () => {
       <div>
       <h3 className="text-center w-full text-neutral-400 text-sm mb-2 ">Experimental Features</h3>
       <div className='flex flex-col gap-2'> 
-      <Gemini />
       </div>
       </div>
       </div>

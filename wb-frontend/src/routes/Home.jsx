@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DarkModeToggle } from '../components/uiElements';
-import gandalf from '../assets/gandalf-noshadow.svg';
 import github from '../assets/github.svg';
 
 const API = (import.meta.env.MODE === 'development')  ? 'http://localhost:1234' : 'https://ws.ronkiehn.dev';
@@ -52,9 +51,9 @@ export default function Home() {
           <DarkModeToggle />
         </div>
 
-        <h1 className="sm:text-9xl text-8xl font-bold text-center">Gandalf</h1>
+        <h1 className="sm:text-9xl text-8xl font-bold text-center">ArtFreak</h1>
         <h2 className="text-lg sm:text-xl font-semibold text-center flex items-center gap-2">
-        a magic whiteboard <img className="-mt-1" src={gandalf} alt="Gandalf Logo" width={32} height={32} /> 
+        unleash your creativity
         </h2>
         
         <div className="mt-8 relative px-4 py-6 rounded-2xl shadow-md border shadow-neutral-500 flex flex-col gap-4
@@ -107,7 +106,7 @@ export default function Home() {
       </main>
       <footer className="absolute bottom-0 left-1/2 transform -translate-x-1/2 flex gap-2 items-center p-2">
        
-      <a href='https://github.com/ronthekiehn/gandalf' target="_blank" rel="noopener noreferrer" className="hover:scale-105">
+      <a href='https://github.com/yourusername/artfreak' target="_blank" rel="noopener noreferrer" className="hover:scale-105">
             <img src={github}  alt="GitHub" className="dark:invert w-6 h-6" />
         </a>
         

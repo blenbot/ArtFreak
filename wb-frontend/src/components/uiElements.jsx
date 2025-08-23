@@ -41,7 +41,6 @@ export const Tooltip = ({ children, direction = "top", content, cn='' }) => {
     };
 
     const handleMouseLeave = () => {
-        // Clear the timeout and hide the tooltip
         clearTimeout(timeoutRef.current);
         setVisible(false);
     };

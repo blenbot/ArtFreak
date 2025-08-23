@@ -1,4 +1,3 @@
-// entirely vibe coded by my boy alex
 export const findTriangleVertices = (points) => {
   let vertices = [];
   let maxArea = 0;
@@ -49,7 +48,6 @@ export const detectShape = (points) => {
   const centerX = (minX + maxX) / 2;
   const centerY = (minY + maxY) / 2;
 
-  // Calculate scores for each shape
   const scores = {
     line: calculateLineScore(points),
     rectangle: calculateRectangleScore(points, minX, maxX, minY, maxY),
@@ -57,7 +55,6 @@ export const detectShape = (points) => {
     triangle: calculateTriangleScore(points)
   };
 
-  // Find the shape with highest score
   const bestShape = Object.entries(scores).reduce((a, b) => a[1] > b[1] ? a : b)[0];
 
   switch (bestShape) {
@@ -103,11 +100,10 @@ const calculateRectangleScore = (points, minX, maxX, minY, maxY) => {
     Math.pow(end.x - start.x, 2) + Math.pow(end.y - start.y, 2)
   );
   
-  // If points are very line-like, penalize rectangle score
   const width = maxX - minX;
   const height = maxY - minY;
   const aspectRatio = Math.max(width / height, height / width);
-  if (aspectRatio > 4) return 0.1; // Heavy penalty for very elongated shapes
+  if (aspectRatio > 4) return 0.1;
 
   const edgeDistances = points.map(point => {
     const distanceX = Math.min(Math.abs(point.x - minX), Math.abs(point.x - maxX));

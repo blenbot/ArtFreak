@@ -3,7 +3,6 @@ import { useRef, useEffect, useState } from 'react';
 import useWhiteboardStore from '../stores/whiteboardStore';
 import useUIStore from '../stores/uiStore';
 import { Tooltip } from './uiElements';
-import StrokeGen from './StrokeGen';
 
 const Toolbar = () => {
     const CLEAR_DELAY = 1000; // 1 second
@@ -109,7 +108,6 @@ const Toolbar = () => {
           <Eraser className='w-5 h-5 sm:h-auto sm:w-auto'/>
         </button>
       </Tooltip>
-      <StrokeGen />
       <Tooltip content="Shape Recognition">
         <button
           className={`cursor-pointer p-1 sm:p-2 rounded transition-all flex items-center justify-center text-lg
