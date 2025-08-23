@@ -66,7 +66,7 @@ const rooms = new Map();
 const ROOM_CLEANUP_DELAY = 10 * 60 * 1000;
 const roomTimeouts = new Map();
 const WSrateLimiter = new RateLimiter(5000, 30);
-const httpRateLimiter = new RateLimiter(5000, 15); // Increased for mobile networks
+const httpRateLimiter = new RateLimiter(5000, 15);
 
 setInterval(() => WSrateLimiter.cleanup(), 10000);
 setInterval(() => httpRateLimiter.cleanup(), 10000);
@@ -74,25 +74,29 @@ setInterval(() => httpRateLimiter.cleanup(), 10000);
 const INACTIVE_TIMEOUT = 10 * 60 * 1000;
 const HEARTBEAT_INTERVAL = 30 * 1000;
 
-// Enhanced CORS configuration for mobile networks
+// Fixed CORS configuration
 const corsOptions = {
   origin: function (origin, callback) {
+    console.log('CORS request from origin:', origin);
+    
     // Allow requests with no origin (mobile apps, Postman, etc.)
     if (!origin) return callback(null, true);
     
     const allowedOrigins = environment === 'production' 
       ? [
-          'https://art-freakk.vercel.app/',
-          'https://art-freakk.vercel.app', 
+          'https://art-freakk.vercel.app', // Fixed: removed trailing slash
           'https://www.art-freakk.vercel.app',
-          /^https:\/\/.*\.vercel\.app$/, // Allow all Vercel deployments
-          /^https:\/\/.*\.netlify\.app$/, // Allow Netlify if you switch
+          /^https:\/\/art-freakk.*\.vercel\.app$/, // Match all your Vercel deployments
+          /^https:\/\/.*\.vercel\.app$/, // Allow all Vercel deployments for testing
         ] 
       : [
           'http://localhost:5173',
           'http://127.0.0.1:5173',
-          'http://192.168.1.1:5173', // Local network testing
-          /^http:\/\/192\.168\.\d+\.\d+:5173$/, // Local network range
+          'http://localhost:3000',
+          'http://127.0.0.1:3000',
+          /^http:\/\/localhost:\d+$/,
+          /^http:\/\/127\.0\.0\.1:\d+$/,
+          /^http:\/\/192\.168\.\d+\.\d+:\d+$/, // Local network range
         ];
 
     const isAllowed = allowedOrigins.some(allowed => {
@@ -100,9 +104,10 @@ const corsOptions = {
       return allowed.test(origin);
     });
 
+    console.log('Origin allowed:', isAllowed);
     callback(null, isAllowed);
   },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'HEAD', 'PATCH'],
   allowedHeaders: [
     'Content-Type', 
     'Authorization', 
@@ -111,11 +116,15 @@ const corsOptions = {
     'Origin',
     'Cache-Control',
     'Pragma',
-    'X-Custom-Header'
+    'X-Custom-Header',
+    'Access-Control-Allow-Headers',
+    'Access-Control-Allow-Origin',
+    'Access-Control-Allow-Methods'
   ],
-  credentials: true,
+  credentials: false, // Set to false to avoid credential issues
   maxAge: 86400, // 24 hours preflight cache
-  optionsSuccessStatus: 200 // For legacy browsers
+  optionsSuccessStatus: 200,
+  preflightContinue: false
 };
 
 setInterval(() => {
@@ -152,183 +161,172 @@ setInterval(() => {
   }
 }, 60000);
 
+// Apply CORS middleware
+const corsMiddleware = cors(corsOptions);
+
 const server = http.createServer((req, res) => {
   const ip = req.socket.remoteAddress;
   
-  // Enhanced mobile network headers
-  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, no-transform');
-  res.setHeader('Pragma', 'no-cache');
-  res.setHeader('Expires', '0');
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('X-Frame-Options', 'DENY');
-  res.setHeader('X-XSS-Protection', '1; mode=block');
-  
-  // Mobile carrier compatibility headers
-  res.setHeader('Vary', 'Origin, Accept-Encoding');
-  res.setHeader('X-Robots-Tag', 'noindex, nofollow');
-  
-  // Enhanced CORS headers for mobile networks
-  const origin = req.headers.origin;
-  if (origin) {
-    corsOptions.origin(origin, (err, allowed) => {
-      if (allowed) {
-        res.setHeader('Access-Control-Allow-Origin', origin);
-      }
-    });
-  } else {
-    // Allow requests with no origin (mobile apps)
-    res.setHeader('Access-Control-Allow-Origin', '*');
-  }
-  
-  res.setHeader('Access-Control-Allow-Methods', corsOptions.methods.join(', '));
-  res.setHeader('Access-Control-Allow-Headers', corsOptions.allowedHeaders.join(', '));
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Max-Age', corsOptions.maxAge.toString());
-  
-  // Handle preflight requests for mobile browsers
-  if (req.method === 'OPTIONS') {
-    res.writeHead(200);
-    res.end();
-    return;
-  }
+  console.log(`${req.method} ${req.url} from ${ip} (Origin: ${req.headers.origin})`);
 
-  if (httpRateLimiter.isRateLimited(ip)) {
-    console.warn(`Rate limited ${ip}`);
-    res.writeHead(429, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ 
-      error: 'Rate limited',
-      message: 'Too many requests. Please try again later.',
-      retryAfter: 5
-    }));
-    return;
-  }
+  // Apply CORS first
+  corsMiddleware(req, res, () => {
+    // Additional security headers
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('X-XSS-Protection', '1; mode=block');
+    res.setHeader('Vary', 'Origin, Accept-Encoding');
+    res.setHeader('X-Robots-Tag', 'noindex, nofollow');
 
-  // Enhanced health check with more details
-  if (req.url === '/health') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
-      status: 'healthy',
-      timestamp: new Date().toISOString(),
-      server: 'ArtFreak WebSocket Server',
-      version: '1.1.0',
-      activeConnections: wss.clients.size,
-      activeRooms: rooms.size,
-      environment: environment,
-      uptime: process.uptime(),
-      memory: process.memoryUsage(),
-      mobileOptimized: true
-    }));
-    return;
-  }
+    // Handle preflight requests explicitly
+    if (req.method === 'OPTIONS') {
+      console.log('Handling OPTIONS preflight request');
+      res.writeHead(200);
+      res.end();
+      return;
+    }
 
-  // Enhanced create-room endpoint
-  if (req.url === '/create-room') {
-    try {
-      let roomCode;
-      let attempts = 0;
-      do {
-        roomCode = crypto.randomUUID().slice(0, 6).toUpperCase(); // Longer code for uniqueness
-        attempts++;
-      } while (rooms.has(roomCode) && attempts < 10);
+    // Rate limiting
+    if (httpRateLimiter.isRateLimited(ip)) {
+      console.warn(`Rate limited ${ip}`);
+      res.writeHead(429, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ 
+        error: 'Rate limited',
+        message: 'Too many requests. Please try again later.',
+        retryAfter: 5
+      }));
+      return;
+    }
 
-      if (attempts >= 10) {
+    // Enhanced health check
+    if (req.url === '/health') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        status: 'healthy',
+        timestamp: new Date().toISOString(),
+        server: 'ArtFreak WebSocket Server',
+        version: '1.2.0',
+        activeConnections: wss ? wss.clients.size : 0,
+        activeRooms: rooms.size,
+        environment: environment,
+        uptime: process.uptime(),
+        memory: process.memoryUsage(),
+        mobileOptimized: true,
+        cors: 'enabled'
+      }));
+      return;
+    }
+
+    // Create room endpoint
+    if (req.url === '/create-room' && req.method === 'GET') {
+      try {
+        let roomCode;
+        let attempts = 0;
+        do {
+          roomCode = crypto.randomUUID().slice(0, 6).toUpperCase();
+          attempts++;
+        } while (rooms.has(roomCode) && attempts < 10);
+
+        if (attempts >= 10) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ 
+            error: 'Unable to generate unique room code',
+            message: 'Please try again'
+          }));
+          return;
+        }
+
+        // Pre-create the room
+        rooms.set(roomCode, new Y.Doc());
+        
+        console.log(`Created room: ${roomCode} from IP: ${ip}`);
+        
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ 
+          roomCode,
+          status: 'success',
+          timestamp: new Date().toISOString()
+        }));
+      } catch (error) {
+        console.error('Error creating room:', error);
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ 
-          error: 'Unable to generate unique room code',
-          message: 'Please try again'
+          error: 'Internal server error',
+          message: 'Failed to create room. Please try again.'
         }));
-        return;
       }
-
-      // Pre-create the room
-      rooms.set(roomCode, new Y.Doc());
-      
-      console.log(`Created room: ${roomCode} from IP: ${ip}`);
-      
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ 
-        roomCode,
-        status: 'success',
-        timestamp: new Date().toISOString()
-      }));
-    } catch (error) {
-      console.error('Error creating room:', error);
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ 
-        error: 'Internal server error',
-        message: 'Failed to create room. Please try again.'
-      }));
+      return;
     }
-    return;
-  }
 
-  // Enhanced check-room endpoint
-  if (req.url.startsWith('/check-room')) {
-    try {
-      const url = new URL(req.url, `http://${req.headers.host}`);
-      const roomCode = url.searchParams.get('roomCode');
-      
-      if (!roomCode) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
+    // Check room endpoint
+    if (req.url.startsWith('/check-room') && req.method === 'GET') {
+      try {
+        const url = new URL(req.url, `http://${req.headers.host}`);
+        const roomCode = url.searchParams.get('roomCode');
+        
+        if (!roomCode) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ 
+            error: 'Missing room code',
+            exists: false
+          }));
+          return;
+        }
+
+        const exists = rooms.has(roomCode);
+        
+        console.log(`Room check: ${roomCode} - exists: ${exists}`);
+        
+        res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ 
-          error: 'Missing room code',
+          exists,
+          roomCode: exists ? roomCode : null,
+          timestamp: new Date().toISOString()
+        }));
+      } catch (error) {
+        console.error('Error checking room:', error);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ 
+          error: 'Internal server error',
           exists: false
         }));
-        return;
       }
-
-      const exists = rooms.has(roomCode);
-      
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ 
-        exists,
-        roomCode: exists ? roomCode : null,
-        timestamp: new Date().toISOString()
-      }));
-    } catch (error) {
-      console.error('Error checking room:', error);
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ 
-        error: 'Internal server error',
-        exists: false
-      }));
+      return;
     }
-    return;
-  }
 
-  // Default response
-  res.writeHead(200, { 'Content-Type': 'text/plain' });
-  res.end(`ArtFreak WebSocket Server v1.1.0
-Mobile Network Optimized
+    // Default response
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
+    res.end(`ArtFreak WebSocket Server v1.2.0
+CORS Fixed & Mobile Network Optimized
 Status: Running
 Environment: ${environment}
 Timestamp: ${new Date().toISOString()}
 `);
+  });
 });
 
-// Enhanced WebSocket server configuration for mobile networks
+// Enhanced WebSocket server configuration
 const wss = new WebSocket.Server({ 
   server,
   perMessageDeflate: {
     zlibDeflateOptions: {
       chunkSize: 1024,
-      memLevel: 6, // Reduced for mobile
-      level: 2     // Faster compression for mobile
+      memLevel: 6,
+      level: 2
     },
     zlibInflateOptions: {
-      chunkSize: 8 * 1024 // Reduced for mobile
+      chunkSize: 8 * 1024
     },
     clientNoContextTakeover: true,
     serverNoContextTakeover: true,
-    serverMaxWindowBits: 9, // Reduced for mobile
-    concurrencyLimit: 5,    // Reduced for mobile
-    threshold: 512          // Lower threshold for mobile
+    serverMaxWindowBits: 9,
+    concurrencyLimit: 5,
+    threshold: 512
   },
-  maxPayload: 32 * 1024, // Reduced for mobile networks
+  maxPayload: 32 * 1024,
   skipUTF8Validation: true,
-  // Mobile-specific timeout settings
-  handshakeTimeout: 10000, // 10 seconds
-  backlogSize: 100,        // Reduced backlog
+  handshakeTimeout: 10000,
+  backlogSize: 100,
   noServer: false
 });
 
@@ -343,7 +341,6 @@ wss.on('connection', (ws, req) => {
   ws.binaryType = 'arraybuffer';
   ws.isAlive = true;
   
-  // Enhanced mobile connection handling
   ws.on('pong', () => {
     ws.isAlive = true;
   });
@@ -388,7 +385,6 @@ wss.on('connection', (ws, req) => {
 
     clients.set(clientID, clientInfo);
 
-    // Mobile-optimized heartbeat
     const heartbeat = setInterval(() => {
       if (ws.readyState === WebSocket.OPEN) {
         try {
@@ -487,12 +483,12 @@ wss.on('connection', (ws, req) => {
   setupWSConnection(ws, req, {
     doc: yDoc,
     cors: true,
-    maxBackoffTime: 5000, // Increased for mobile networks
+    maxBackoffTime: 5000,
     gc: false
   });
 });
 
-// Enhanced ping/pong for mobile networks
+// Ping/pong for connection health
 const pingInterval = setInterval(() => {
   wss.clients.forEach((ws) => {
     if (ws.isAlive === false) {
@@ -508,7 +504,7 @@ const pingInterval = setInterval(() => {
       ws.terminate();
     }
   });
-}, 25000); // 25 seconds for mobile networks
+}, 25000);
 
 const getConnectedClients = () => {
   return Array.from(clients.values()).map(client => ({
@@ -525,12 +521,13 @@ const getConnectedClients = () => {
 setInterval(() => {
   const activeClients = getConnectedClients();
   console.log(`[${new Date().toISOString()}] Active clients: ${activeClients.length}, Rooms: ${rooms.size}`);
-}, 300000); // Every 5 minutes
+}, 300000);
 
 server.listen(port, host, () => {
-  console.log(`ArtFreak WebSocket Server v1.1.0 running on ws://${host}:${port}`);
-  console.log('Mobile network optimizations: ENABLED');
+  console.log(`ArtFreak WebSocket Server v1.2.0 running on ws://${host}:${port}`);
+  console.log('CORS fixed and mobile network optimizations: ENABLED');
   console.log('Environment:', environment);
+  console.log('Allowed origins:', JSON.stringify(corsOptions.origin.toString()));
   
   process.on('SIGINT', () => {
     console.log('Shutting down server...');
