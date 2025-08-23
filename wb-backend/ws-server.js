@@ -123,7 +123,7 @@ const server = http.createServer((req, res) => {
   }
   const corsMiddleware = cors({
     origin: environment === 'production' 
-      ? ['https://artfreak.vercel.app', 'https://www.artfreak.vercel.app'] 
+      ? ['https://art-freakk.vercel.app', 'https://www.art-freakk.vercel.app'] 
       : ['http://localhost:5173'],
     methods: ['GET', 'POST', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
