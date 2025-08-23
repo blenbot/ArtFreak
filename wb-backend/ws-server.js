@@ -24,10 +24,7 @@ class RateLimiter {
     const now = Date.now();
     const history = this.connections.get(ip) || [];
     
-    // Keep only connections within the time window
     const recentConnections = history.filter(ts => now - ts < this.windowMs);
-    
-    // Add new connection timestamp
     recentConnections.push(now);
     this.connections.set(ip, recentConnections);
 
@@ -59,25 +56,67 @@ const sanitizeInput = (input) => {
       };
       return entities[char];
     })
-    .replace(/[<>]/g, '') // Remove < and >
+    .replace(/[<>]/g, '') 
     .trim()
-    .slice(0, 16); // Limit length
+    .slice(0, 16);
 };
 
 const clients = new Map();
 const rooms = new Map();
-const ROOM_CLEANUP_DELAY = 10 * 60 * 1000; // 10 minutes
+const ROOM_CLEANUP_DELAY = 10 * 60 * 1000;
 const roomTimeouts = new Map();
-const WSrateLimiter = new RateLimiter(5000, 30); // 30 connections every 5 seconds
-const httpRateLimiter = new RateLimiter(5000, 10); // 10 requests every 5 seconds
+const WSrateLimiter = new RateLimiter(5000, 30);
+const httpRateLimiter = new RateLimiter(5000, 15); // Increased for mobile networks
 
 setInterval(() => WSrateLimiter.cleanup(), 10000);
 setInterval(() => httpRateLimiter.cleanup(), 10000);
 
-const INACTIVE_TIMEOUT = 10 * 60 * 1000; // 10 minutes inactivity timeout
-const HEARTBEAT_INTERVAL = 30 * 1000;   // Send heartbeat every 30 seconds
+const INACTIVE_TIMEOUT = 10 * 60 * 1000;
+const HEARTBEAT_INTERVAL = 30 * 1000;
 
-// Clean up inactive users every minute
+// Enhanced CORS configuration for mobile networks
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Allow requests with no origin (mobile apps, Postman, etc.)
+    if (!origin) return callback(null, true);
+    
+    const allowedOrigins = environment === 'production' 
+      ? [
+          'https://art-freakk.vercel.app', 
+          'https://www.art-freakk.vercel.app',
+          /^https:\/\/.*\.vercel\.app$/, // Allow all Vercel deployments
+          /^https:\/\/.*\.netlify\.app$/, // Allow Netlify if you switch
+        ] 
+      : [
+          'http://localhost:5173',
+          'http://127.0.0.1:5173',
+          'http://192.168.1.1:5173', // Local network testing
+          /^http:\/\/192\.168\.\d+\.\d+:5173$/, // Local network range
+        ];
+
+    const isAllowed = allowedOrigins.some(allowed => {
+      if (typeof allowed === 'string') return allowed === origin;
+      return allowed.test(origin);
+    });
+
+    callback(null, isAllowed);
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: [
+    'Content-Type', 
+    'Authorization', 
+    'X-Requested-With',
+    'Accept',
+    'Origin',
+    'Cache-Control',
+    'Pragma',
+    'X-Custom-Header'
+  ],
+  credentials: true,
+  maxAge: 86400, // 24 hours preflight cache
+  optionsSuccessStatus: 200 // For legacy browsers
+};
+
 setInterval(() => {
   const now = Date.now();
   for (const [clientId, client] of clients.entries()) {
@@ -86,7 +125,6 @@ setInterval(() => {
       client.ws.close(1000, 'Inactive timeout');
       clients.delete(clientId);
 
-      // Notify remaining users in the room about the user leaving
       const remainingUsers = Array.from(clients.values())
         .filter(c => c.roomCode === client.roomCode)
         .map(c => ({
@@ -115,26 +153,36 @@ setInterval(() => {
 
 const server = http.createServer((req, res) => {
   const ip = req.socket.remoteAddress;
-  if (httpRateLimiter.isRateLimited(ip)) {
-    console.warn(`Too many requests from ${ip}`);
-    res.writeHead(429, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: 'Too many requests' }));
-    return;
-  }
-
-  // Add mobile network specific headers and optimizations
-  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  
+  // Enhanced mobile network headers
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, no-transform');
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('X-XSS-Protection', '1; mode=block');
   
-  // Mobile-specific headers for better compatibility
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
-  res.setHeader('Access-Control-Max-Age', '86400'); // 24 hours
+  // Mobile carrier compatibility headers
+  res.setHeader('Vary', 'Origin, Accept-Encoding');
+  res.setHeader('X-Robots-Tag', 'noindex, nofollow');
+  
+  // Enhanced CORS headers for mobile networks
+  const origin = req.headers.origin;
+  if (origin) {
+    corsOptions.origin(origin, (err, allowed) => {
+      if (allowed) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+      }
+    });
+  } else {
+    // Allow requests with no origin (mobile apps)
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
+  
+  res.setHeader('Access-Control-Allow-Methods', corsOptions.methods.join(', '));
+  res.setHeader('Access-Control-Allow-Headers', corsOptions.allowedHeaders.join(', '));
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Max-Age', corsOptions.maxAge.toString());
   
   // Handle preflight requests for mobile browsers
   if (req.method === 'OPTIONS') {
@@ -143,85 +191,164 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  const corsMiddleware = cors({
-    origin: environment === 'production' 
-      ? ['https://art-freakk.vercel.app', 'https://www.art-freakk.vercel.app'] 
-      : ['http://localhost:5173'],
-    methods: ['GET', 'POST', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-    credentials: true,
-    maxAge: 86400 // 24 hours for mobile caching
-  });
-  
-  corsMiddleware(req, res, () => {
-    if (req.url === '/health') {
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({
-        status: 'healthy',
-        timestamp: new Date().toISOString(),
-        activeConnections: wss.clients.size,
-        activeRooms: rooms.size,
-        server: 'ArtFreak WebSocket Server',
-        version: '1.0.0'
-      }));
-    } else if (req.url === '/create-room') {
-      const roomCode = crypto.randomUUID().slice(0, 4);
-      if (!rooms.has(roomCode)) {
-        rooms.set(roomCode, new Y.Doc());
+  if (httpRateLimiter.isRateLimited(ip)) {
+    console.warn(`Rate limited ${ip}`);
+    res.writeHead(429, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ 
+      error: 'Rate limited',
+      message: 'Too many requests. Please try again later.',
+      retryAfter: 5
+    }));
+    return;
+  }
+
+  // Enhanced health check with more details
+  if (req.url === '/health') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      status: 'healthy',
+      timestamp: new Date().toISOString(),
+      server: 'ArtFreak WebSocket Server',
+      version: '1.1.0',
+      activeConnections: wss.clients.size,
+      activeRooms: rooms.size,
+      environment: environment,
+      uptime: process.uptime(),
+      memory: process.memoryUsage(),
+      mobileOptimized: true
+    }));
+    return;
+  }
+
+  // Enhanced create-room endpoint
+  if (req.url === '/create-room') {
+    try {
+      let roomCode;
+      let attempts = 0;
+      do {
+        roomCode = crypto.randomUUID().slice(0, 6).toUpperCase(); // Longer code for uniqueness
+        attempts++;
+      } while (rooms.has(roomCode) && attempts < 10);
+
+      if (attempts >= 10) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ 
+          error: 'Unable to generate unique room code',
+          message: 'Please try again'
+        }));
+        return;
       }
+
+      // Pre-create the room
+      rooms.set(roomCode, new Y.Doc());
+      
+      console.log(`Created room: ${roomCode} from IP: ${ip}`);
+      
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ roomCode }));
-    } else if (req.url.startsWith('/check-room')) {
+      res.end(JSON.stringify({ 
+        roomCode,
+        status: 'success',
+        timestamp: new Date().toISOString()
+      }));
+    } catch (error) {
+      console.error('Error creating room:', error);
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ 
+        error: 'Internal server error',
+        message: 'Failed to create room. Please try again.'
+      }));
+    }
+    return;
+  }
+
+  // Enhanced check-room endpoint
+  if (req.url.startsWith('/check-room')) {
+    try {
       const url = new URL(req.url, `http://${req.headers.host}`);
       const roomCode = url.searchParams.get('roomCode');
+      
+      if (!roomCode) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ 
+          error: 'Missing room code',
+          exists: false
+        }));
+        return;
+      }
+
       const exists = rooms.has(roomCode);
+      
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ exists }));
-    } else {
-      res.writeHead(200, { 'Content-Type': 'text/plain' });
-      res.end('ArtFreak WebSocket Server is running\n');
+      res.end(JSON.stringify({ 
+        exists,
+        roomCode: exists ? roomCode : null,
+        timestamp: new Date().toISOString()
+      }));
+    } catch (error) {
+      console.error('Error checking room:', error);
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ 
+        error: 'Internal server error',
+        exists: false
+      }));
     }
-  });
+    return;
+  }
+
+  // Default response
+  res.writeHead(200, { 'Content-Type': 'text/plain' });
+  res.end(`ArtFreak WebSocket Server v1.1.0
+Mobile Network Optimized
+Status: Running
+Environment: ${environment}
+Timestamp: ${new Date().toISOString()}
+`);
 });
 
+// Enhanced WebSocket server configuration for mobile networks
 const wss = new WebSocket.Server({ 
   server,
-  // Mobile network optimizations
   perMessageDeflate: {
     zlibDeflateOptions: {
       chunkSize: 1024,
-      memLevel: 7,
-      level: 3
+      memLevel: 6, // Reduced for mobile
+      level: 2     // Faster compression for mobile
     },
     zlibInflateOptions: {
-      chunkSize: 10 * 1024
+      chunkSize: 8 * 1024 // Reduced for mobile
     },
     clientNoContextTakeover: true,
     serverNoContextTakeover: true,
-    serverMaxWindowBits: 10,
-    concurrencyLimit: 10,
-    threshold: 1024
+    serverMaxWindowBits: 9, // Reduced for mobile
+    concurrencyLimit: 5,    // Reduced for mobile
+    threshold: 512          // Lower threshold for mobile
   },
-  // Better connection handling for mobile
-  maxPayload: 64 * 1024, // 64KB max payload
-  skipUTF8Validation: true // Skip UTF8 validation for better performance
+  maxPayload: 32 * 1024, // Reduced for mobile networks
+  skipUTF8Validation: true,
+  // Mobile-specific timeout settings
+  handshakeTimeout: 10000, // 10 seconds
+  backlogSize: 100,        // Reduced backlog
+  noServer: false
 });
 
 wss.on('connection', (ws, req) => {
   const ip = req.socket.remoteAddress;
   if (WSrateLimiter.isRateLimited(ip)) {
-    console.warn(`Too many connections from ${ip}`);
-    ws.close(1008, 'Too many connections from your IP');
+    console.warn(`WS rate limited ${ip}`);
+    ws.close(1008, 'Rate limited');
     return;
   }
 
-  // Set mobile-friendly WebSocket options
   ws.binaryType = 'arraybuffer';
-  
-  // Set keep-alive for mobile networks
   ws.isAlive = true;
+  
+  // Enhanced mobile connection handling
   ws.on('pong', () => {
     ws.isAlive = true;
+  });
+
+  ws.on('ping', () => {
+    ws.pong();
   });
 
   const url = new URL(req.url, `ws://${req.headers.host}`);
@@ -230,15 +357,13 @@ wss.on('connection', (ws, req) => {
   const userName = sanitizeInput(url.searchParams.get('username')?.split('/')[0]) || `User-${Math.floor(Math.random() * 1000)}`;
   const userColor = /^#[0-9A-F]{6}$/i.test(url.searchParams.get('color')) 
     ? url.searchParams.get('color')
-    : `#${Math.floor(Math.random() * 16777215).toString(16)}`;
+    : `#${Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0')}`;
 
   if (!roomCode) {
     ws.close(1000, 'No room code provided');
     return;
   }
 
-  const pathParts = url.pathname.split('/');
-  const docName = pathParts[pathParts.length - 1] || roomCode;
   const roomDocKey = roomCode;
 
   if (!rooms.has(roomDocKey)) {
@@ -249,8 +374,6 @@ wss.on('connection', (ws, req) => {
 
   if (connectionType === 'awareness') {
     const clientID = crypto.randomUUID();
-
-    // Store client info first
     const clientInfo = {
       id: clientID,
       connectedAt: new Date(),
@@ -264,16 +387,18 @@ wss.on('connection', (ws, req) => {
 
     clients.set(clientID, clientInfo);
 
-    // Setup heartbeat to keep track of active users (mobile-friendly interval)
+    // Mobile-optimized heartbeat
     const heartbeat = setInterval(() => {
       if (ws.readyState === WebSocket.OPEN) {
         try {
-          ws.ping();
+          ws.ping(Buffer.from('heartbeat'));
         } catch (error) {
-          console.log('Ping failed, closing connection');
+          console.log('Heartbeat failed, closing connection');
           clearInterval(heartbeat);
           ws.close();
         }
+      } else {
+        clearInterval(heartbeat);
       }
     }, HEARTBEAT_INTERVAL);
 
@@ -287,11 +412,10 @@ wss.on('connection', (ws, req) => {
           }
         }
       } catch (e) {
-        // Ignore parsing errors for non-heartbeat messages
+        // Ignore non-JSON messages
       }
     });
 
-    // Get all users in this room (including the new user since we stored it above)
     const activeUsers = Array.from(clients.values())
       .filter(c => c.roomCode === roomCode)
       .map(c => ({
@@ -301,7 +425,6 @@ wss.on('connection', (ws, req) => {
         roomCode: c.roomCode
       }));
 
-    // Send to all clients in THIS room only
     wss.clients.forEach((client) => {
       const clientData = Array.from(clients.values()).find(c => c.ws === client);
       if (client.readyState === WebSocket.OPEN && clientData?.roomCode === roomCode) {
@@ -319,7 +442,7 @@ wss.on('connection', (ws, req) => {
     ws.on('close', () => {
       clearInterval(heartbeat);
       clients.delete(clientID);
-      // Send updated active users list after user leaves
+      
       const remainingUsers = Array.from(clients.values())
         .filter(c => c.roomCode === roomCode)
         .map(c => ({
@@ -363,12 +486,12 @@ wss.on('connection', (ws, req) => {
   setupWSConnection(ws, req, {
     doc: yDoc,
     cors: true,
-    maxBackoffTime: 2500,
+    maxBackoffTime: 5000, // Increased for mobile networks
     gc: false
   });
 });
 
-// Mobile-friendly ping/pong for all connections
+// Enhanced ping/pong for mobile networks
 const pingInterval = setInterval(() => {
   wss.clients.forEach((ws) => {
     if (ws.isAlive === false) {
@@ -378,13 +501,13 @@ const pingInterval = setInterval(() => {
     
     ws.isAlive = false;
     try {
-      ws.ping();
+      ws.ping(Buffer.from('server-ping'));
     } catch (error) {
       console.log('Ping failed, terminating connection');
       ws.terminate();
     }
   });
-}, 30000); // 30 seconds
+}, 25000); // 25 seconds for mobile networks
 
 const getConnectedClients = () => {
   return Array.from(clients.values()).map(client => ({
@@ -400,13 +523,25 @@ const getConnectedClients = () => {
 
 setInterval(() => {
   const activeClients = getConnectedClients();
-  console.log('Active clients:', activeClients.length);
-}, 600000);
+  console.log(`[${new Date().toISOString()}] Active clients: ${activeClients.length}, Rooms: ${rooms.size}`);
+}, 300000); // Every 5 minutes
 
 server.listen(port, host, () => {
-  console.log(`ArtFreak WebSocket Server is running on ws://${host}:${port}`);
-  console.log('Mobile network optimizations enabled');
+  console.log(`ArtFreak WebSocket Server v1.1.0 running on ws://${host}:${port}`);
+  console.log('Mobile network optimizations: ENABLED');
+  console.log('Environment:', environment);
+  
   process.on('SIGINT', () => {
+    console.log('Shutting down server...');
+    clearInterval(pingInterval);
+    wss.close(() => {
+      console.log('WebSocket server closed');
+      process.exit(0);
+    });
+  });
+
+  process.on('SIGTERM', () => {
+    console.log('Received SIGTERM, shutting down gracefully...');
     clearInterval(pingInterval);
     wss.close(() => {
       console.log('WebSocket server closed');
@@ -416,19 +551,17 @@ server.listen(port, host, () => {
 });
 
 const scheduleRoomCleanup = (roomCode) => {
-  // Clear any existing timeout
   if (roomTimeouts.has(roomCode)) {
     clearTimeout(roomTimeouts.get(roomCode));
   }
 
-  // Schedule new cleanup
   const timeout = setTimeout(() => {
     const hasActiveUsers = Array.from(clients.values())
       .some(client => client.roomCode === roomCode);
     
     if (!hasActiveUsers) {
       const doc = rooms.get(roomCode);
-      if (doc) doc.destroy(); // Free up Yjs internals
+      if (doc) doc.destroy();
       rooms.delete(roomCode);
       roomTimeouts.delete(roomCode);
       console.log(`Cleaned up inactive room: ${roomCode}`);
