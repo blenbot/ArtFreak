@@ -1,5 +1,5 @@
-import { Mouse, Hand, Eraser, X, Triangle } from 'lucide-react';
-import { useRef, useEffect, useState } from 'react';
+import { Mouse, Eraser, X, Triangle } from 'lucide-react';
+import { useRef, useState } from 'react';
 import useWhiteboardStore from '../stores/whiteboardStore';
 import useUIStore from '../stores/uiStore';
 import { Tooltip } from './uiElements';
@@ -7,19 +7,10 @@ import { Tooltip } from './uiElements';
 const Toolbar = () => {
     const CLEAR_DELAY = 1000; // 1 second
   const store = useWhiteboardStore();
-  const { useHandTracking, toggleHandTracking, darkMode } = useUIStore();
+  const { darkMode } = useUIStore();
   const colors = ['black', 'red', 'blue', 'green'];
   const clearTimeoutRef = useRef(null);
   const clearStartTimeRef = useRef(0);
-  const [showTutorial, setShowTutorial] = useState(false);
-
-  useEffect(() => {
-    // Check if user has seen the tutorial before
-    const hasSeenTutorial = localStorage.getItem('hasSeenHandTrackingTutorial');
-    if (!hasSeenTutorial) {
-      setShowTutorial(true);
-    }
-  }, []);
 
   const handleClearMouseDown = () => {
     clearStartTimeRef.current = Date.now();
@@ -41,38 +32,22 @@ const Toolbar = () => {
     store.setClearProgress(0);
   };
 
-  const handleTrackingToggle = () => {
-    toggleHandTracking();
-    setShowTutorial(false);
-    localStorage.setItem('hasSeenHandTrackingTutorial', 'true');
-  };
+
 
   return (
     <div className='z-50 sm:left-auto sm:right-auto right-2 left-2 fade-in absolute bottom-3 sm:px-3 sm:py-2 px-2 py-1 flex gap-[2px] sm:gap-1 justify-between items-center shadow-md rounded-2xl shadow-neutral-400 border
     bg-white text-black border-stone-300
     dark:bg-neutral-900 dark:text-white dark:border-stone-700 dark:shadow-neutral-600'>
       <div className='relative'>
-      <Tooltip content='Toggle between hand tracking and mouse control. When hand tracking is enabled, pinch to draw.'>
+      <Tooltip content='Hand tracking is not available in this version'>
         <button
           className='cursor-pointer p-1 sm:p-2 rounded transition-colors
-          hover:bg-neutral-100 dark:hover:bg-neutral-700'
-          onClick={handleTrackingToggle}
+          hover:bg-neutral-100 dark:hover:bg-neutral-700 opacity-50 cursor-not-allowed'
+          disabled
         >
-          {useHandTracking ? <Hand /> : <Mouse />}
+          <Mouse />
         </button>
       </Tooltip>
-      {showTutorial && (
-          <div className="absolute bottom-full sm:left-1/2 left-[200%] -translate-x-1/2 mb-3 w-48 p-2 dark:bg-blue-300 bg-blue-600 text-white dark:text-black text-sm rounded-lg shadow-lg">
-            <div className="relative">
-              Click here to toggle hand tracking. Pinch to draw!
-              <div className="absolute -bottom-3.5 sm:left-1/2 left-7 -translate-x-1/2 w-0 h-0 
-                border-l-[8px] border-l-transparent
-                border-t-[8px] border-t-blue-600 dark:border-t-blue-300
-                border-r-[8px] border-r-transparent">
-              </div>
-            </div>
-          </div>
-        )}
       </div>
       
 
