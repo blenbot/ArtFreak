@@ -113,9 +113,6 @@ setInterval(() => {
   }
 }, 60000);
 
-// Apply CORS middleware
-const corsMiddleware = cors(corsOptions);
-
 const server = http.createServer((req, res) => {
   const ip = req.socket.remoteAddress;
   if (httpRateLimiter.isRateLimited(ip)) {

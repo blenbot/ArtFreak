@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Wifi, WifiOff, Palette, Sparkles, Users, Zap } from 'lucide-react';
+import { DarkModeToggle } from '../components/uiElements';
 
 const API = (import.meta.env.MODE === 'development')  ? 'http://localhost:1234' : 'https://artfreak-production.up.railway.app';
 
@@ -103,9 +103,9 @@ export default function Home() {
         </div>
 
       </main>
-
-      {/* Error message */}
-      <ErrorMessage error={error} />
+      <footer className="absolute bottom-0 left-1/2 transform -translate-x-1/2 flex gap-2 items-center p-2">
+        {/* Footer content removed */}
+      </footer>
     </div>
   );
 }
