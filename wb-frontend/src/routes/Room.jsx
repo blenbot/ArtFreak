@@ -43,7 +43,7 @@ export default function Room() {
       <header className=" flex items-center justify-between gap-2 bg-white dark:bg-neutral-900 dark:text-white">
        
         <h1 className="flex p-2 gap-2 items-start text-2xl font-bold">
-          <span>Gandalf<span className="text-neutral-400">.design/{roomId}</span></span>
+          <span>ArtFreak<span className="text-neutral-400">.app/{roomId}</span></span>
           
         </h1>
         <div className='flex items-center gap-4 mr-1'>

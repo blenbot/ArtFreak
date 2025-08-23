@@ -728,23 +728,36 @@ const useWhiteboardStore = create((set, get) => ({
       ctx.save();
       const dpr = window.devicePixelRatio || 1;
       ctx.scale(dpr, dpr);
-      if (isDarkMode && state.penColor === 'black') {
-        ctx.fillStyle = state.isDrawing ? 'white' : 'gray';
-      } else if (isDarkMode && state.selectedTool === 'eraser') {
-        ctx.fillStyle = state.isDrawing ? 'black' : 'gray';
-      } else {
-        ctx.fillStyle = state.isDrawing ? state.penColor : 'gray';
+      
+      // Always show cursor with good contrast
+      let cursorColor = state.penColor;
+      let strokeColor = 'white';
+      
+      // Ensure good visibility on all backgrounds
+      if (state.selectedTool === 'eraser') {
+        cursorColor = isDarkMode ? 'white' : 'black';
+        strokeColor = isDarkMode ? 'black' : 'white';
+      } else if (state.penColor === 'black' && isDarkMode) {
+        cursorColor = 'white';
+        strokeColor = 'black';
+      } else if (state.penColor === 'white' && !isDarkMode) {
+        cursorColor = 'black';
+        strokeColor = 'white';
       }
+      
       ctx.beginPath();
       const newPenSize = Math.max(12, state.penSize);
       ctx.arc(state.cursorPosition.x, state.cursorPosition.y, newPenSize / 2, 0, 2 * Math.PI);
-      if (state.selectedTool === 'eraser'){
-        ctx.strokeStyle = isDarkMode ? 'white' : 'black';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-      }
-     
+      
+      // Fill cursor
+      ctx.fillStyle = cursorColor;
       ctx.fill();
+      
+      // Add stroke for better visibility
+      ctx.strokeStyle = strokeColor;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      
       ctx.restore();
     }
   },

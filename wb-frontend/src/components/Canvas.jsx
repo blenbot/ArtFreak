@@ -123,10 +123,10 @@ const Canvas = ({ roomCode }) => {
     };
   }, [ctx, useHandTracking]);
 
-  // Add this new effect to sync showCursor with handTracking
+  // Always show cursor for better user experience
   useEffect(() => {
-    store.setShowCursor(useHandTracking);
-  }, [useHandTracking]);
+    store.setShowCursor(true);
+  }, []);
 
   // Add this ref to track latest state
   const currentLineRef = useRef(store.currentLine);
@@ -213,28 +213,29 @@ const Canvas = ({ roomCode }) => {
 
   useEffect(() => {
     const handleMouseMove = (e) => {
-      if (!useHandTracking) {
-        const rect = canvasRef.current.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
+      const rect = canvasRef.current.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
 
-        // Update awareness with mouse position
-        store.updateAwareness({
-          cursor: { x, y },
-          isDrawing: store.isDrawing,
-          user: {
-            id: store.clientID,
-            name: store.userName,
-            color: store.penColor,
-          },
-        });
-      }
+      // Always update cursor position for visibility
+      store.updateCursorPosition({ x, y });
+
+      // Update awareness with mouse position
+      store.updateAwareness({
+        cursor: { x, y },
+        isDrawing: store.isDrawing,
+        user: {
+          id: store.clientID,
+          name: store.userName,
+          color: store.penColor,
+        },
+      });
     };
 
     const handleMouseLeave = () => {
-      if (!useHandTracking) {
-        store.clearAwareness();
-      }
+      store.clearAwareness();
+      // Clear cursor position when leaving canvas
+      store.updateCursorPosition({ x: -100, y: -100 });
     };
 
     if (canvasRef.current) {
@@ -295,7 +296,7 @@ const Canvas = ({ roomCode }) => {
 
       <canvas
         ref={canvasRef}
-        className={`${!useHandTracking ? 'cursor-crosshair' : ''} w-full h-full bg-white dark:bg-neutral-900`}
+        className="w-full h-full bg-white dark:bg-neutral-900 cursor-crosshair"
         onMouseDown={startDrawing}
         onMouseMove={draw}
         onMouseUp={endDrawing}
