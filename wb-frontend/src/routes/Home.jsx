@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DarkModeToggle } from '../components/uiElements';
 
-const API = (import.meta.env.MODE === 'development')  ? 'http://localhost:1234' : 'https://artfreak-production.up.railway.app';
+const API = import.meta.env.VITE_API_URL || (import.meta.env.MODE === 'development' ? 'http://localhost:1234' : '');
 
 export default function Home() {
   const [createMode, setCreateMode] = useState(true);
